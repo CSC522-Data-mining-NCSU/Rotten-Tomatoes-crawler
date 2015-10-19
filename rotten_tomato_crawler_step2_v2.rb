@@ -10,7 +10,7 @@ new_lines = Array.new #store new movies' info
 error_movies = Array.new #store info of error movies
 iterator = 1
 #path = "./movies_titles_error_in_step1.txt"
-path = "./movies_titles_error_in_step1.txt"
+path = "./error_movies_step2_year_not_match.txt"
 error_path = "./error_movies_id_year_title.txt"
 #read movie titles from file
 File.open(path, "r") do |f|
@@ -80,7 +80,7 @@ movie_titles.each_with_index do |title, outer_index|
       match_year = (temp_result['candidate_movies']['year'][index].gsub(/\(|\)/, '').to_i - movie_years[outer_index].to_i).abs < 4 if !temp_result['candidate_movies']['year'][index].nil?
       match_title = temp_result['candidate_movies']['title'][index] == fz_title if !temp_result['candidate_movies']['title'][index].nil?
 
-      if (match_year and match_title)
+      if match_year and match_title
         begin
           #crawling again (get name, year, link)
           absolute_url = "http://www.rottentomatoes.com" + temp_result['candidate_movies']['link'][index]
@@ -99,6 +99,7 @@ movie_titles.each_with_index do |title, outer_index|
           end
           #puts result
           results << result
+          break
         rescue
           puts "Error movie" + iterator.to_s + ':' + title + ' (redirect page not match)'
           iterator += 1 
@@ -106,16 +107,11 @@ movie_titles.each_with_index do |title, outer_index|
           results << result
           error_movies << title
         end
-      elsif !match_year and index == temp_result['candidate_movies']['title'].length - 1
-        puts "Error movie" + iterator.to_s + ':' + title + ' (year not match)'
+      end
+      if index == temp_result['candidate_movies']['title'].length - 1
+        puts "Error movie" + iterator.to_s + ':' + title + ' (not match)'
         iterator += 1 
-        result = 'Error movie: year not match'
-        results << result
-        error_movies << title
-      elsif !match_title  and index == temp_result['candidate_movies']['title'].length - 1
-        puts "Error movie" + iterator.to_s + ':' + title + ' (title not match)'
-        iterator += 1 
-        result = 'Error movie -' + title + ': title not match'
+        result = 'Error movie: not match'
         results << result
         error_movies << title
       end
