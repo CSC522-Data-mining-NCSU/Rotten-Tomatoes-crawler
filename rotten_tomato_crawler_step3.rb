@@ -2,7 +2,6 @@ require 'wombat'
 require 'fuzzy_match'
 require 'net/http'
 require 'uri'
-require 'pry'
 
 movie_titles = Array.new #store all movie titles
 movie_years = Array.new #store all movie years
@@ -11,7 +10,7 @@ new_lines = Array.new #store new movies' info
 error_movies = Array.new #store info of error movies
 iterator = 1
 #path = "./movies_titles_error_in_step1.txt"
-path = "./movie_titles_simple.txt"
+path = "./movies_titles_error_in_step1.txt"
 error_path = "./error_movies_id_year_title.txt"
 #read movie titles from file
 File.open(path, "r") do |f|
@@ -24,18 +23,22 @@ end
 movie_titles.each_with_index do |title, outer_index|
   #Search movie
   title_for_url = title.gsub(/\s/, '+')
-  temp_result = Wombat.crawl do
-    absolute_url = "http://www.rottentomatoes.com/search/?search=" + title_for_url
-    base_url absolute_url
-    path "/"
+  begin
+    temp_result = Wombat.crawl do
+      absolute_url = "http://www.rottentomatoes.com/search/?search=" + title_for_url
+      base_url absolute_url
+      path "/"
 
-    success_info "xpath=//div[contains(@class, 'ui-tabs')]/h1//text()"
-    error_info "xpath=//h1[contains(@class, 'center noresults')]//text()"
-    candidate_movies do
-      title "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/a//text()", :list
-      year "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/span//text()", :list
-      link "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/a/@href", :list
+      success_info "xpath=//div[contains(@class, 'ui-tabs')]/h1//text()"
+      error_info "xpath=//h1[contains(@class, 'center noresults')]//text()"
+      candidate_movies do
+        title "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/a//text()", :list
+        year "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/span//text()", :list
+        link "xpath=//div[contains(@class, 'results_content')]/ul/li/div/div/a/@href", :list
+      end
     end
+  rescue
+    puts "==============Search error================"
   end
   search_success = !temp_result['success_info'].nil? and temp_result['error_info'].nil? and temp_result['success_info'].downcase.byteslice(0,18) == "search results for"
   search_error = !temp_result['error_info'].nil? and temp_result['success_info'].nil? and temp_result['error_info'].downcase.byteslice(0,27) == "sorry, no results found for"
@@ -44,49 +47,65 @@ movie_titles.each_with_index do |title, outer_index|
   if !search_success and !search_error
     absolute_url = "http://www.rottentomatoes.com/search/?search=" + title_for_url
     real_uri = Net::HTTP.get_response(URI.parse(absolute_url))['location']
-    absolute_url = "http://www.rottentomatoes.com" + real_uri
-    result = Wombat.crawl do
-      base_url absolute_url
+    absolute_url = "http://www.rottentomatoes.com" + real_uri if !real_uri.nil?
+    begin
+      result = Wombat.crawl do
+        base_url absolute_url
 
-      name 'xpath=//h1[@itemprop="name"]'
+        name 'xpath=//h1[@itemprop="name"]'
 
-      year 'xpath=//h1[@itemprop="name"]/span//text()'
+        year 'xpath=//h1[@itemprop="name"]/span//text()'
 
-      genres "xpath=//span[@itemprop='genre']//text()", :list
+        genres "xpath=//span[@itemprop='genre']//text()", :list
 
-      directors "xpath=//td[@itemprop='director']/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+        directors "xpath=//td[@itemprop='director']/a[@itemprop='url']/span[@itemprop='name']//text()", :list
 
-      casts "xpath=//div[@itemprop='actors']/div/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+        casts "xpath=//div[@itemprop='actors']/div/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+      end
+      #puts result
+      results << result
+    rescue
+      puts "Error movie" + iterator.to_s + ':' + title + ' (auto-redirect page not match)'
+      iterator += 1 
+      result = 'Error movie -' + title + ': auto-redirect page not match'
+      results << result
+      error_movies << title
     end
-    #puts result
-    results << result
   #case2: after search, more than one movies match, choose the matching one
   elsif search_success
     #if search successfully, choose the matching one
     fz_title = FuzzyMatch.new(temp_result['candidate_movies']['title']).find(title)
     temp_result['candidate_movies']['title'].each_with_index do |candidate_movie_title, index|
 
-      match_year = temp_result['candidate_movies']['year'][index].gsub(/\(|\)/, '') == movie_years[outer_index]
-      match_title = temp_result['candidate_movies']['title'][index] == fz_title
+      match_year = (temp_result['candidate_movies']['year'][index].gsub(/\(|\)/, '').to_i - movie_years[outer_index].to_i).abs < 4 if !temp_result['candidate_movies']['year'][index].nil?
+      match_title = temp_result['candidate_movies']['title'][index] == fz_title if !temp_result['candidate_movies']['title'][index].nil?
 
       if (match_year and match_title)
-        #crawling again (get name, year, link)
-        absolute_url = "http://www.rottentomatoes.com" + temp_result['candidate_movies']['link'][index]
-        result = Wombat.crawl do
-          base_url absolute_url
+        begin
+          #crawling again (get name, year, link)
+          absolute_url = "http://www.rottentomatoes.com" + temp_result['candidate_movies']['link'][index]
+          result = Wombat.crawl do
+            base_url absolute_url
 
-          name 'xpath=//h1[@itemprop="name"]'
+            name 'xpath=//h1[@itemprop="name"]'
 
-          year 'xpath=//h1[@itemprop="name"]/span//text()'
+            year 'xpath=//h1[@itemprop="name"]/span//text()'
 
-          genres "xpath=//span[@itemprop='genre']//text()", :list
+            genres "xpath=//span[@itemprop='genre']//text()", :list
 
-          directors "xpath=//td[@itemprop='director']/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+            directors "xpath=//td[@itemprop='director']/a[@itemprop='url']/span[@itemprop='name']//text()", :list
 
-          casts "xpath=//div[@itemprop='actors']/div/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+            casts "xpath=//div[@itemprop='actors']/div/a[@itemprop='url']/span[@itemprop='name']//text()", :list
+          end
+          #puts result
+          results << result
+        rescue
+          puts "Error movie" + iterator.to_s + ':' + title + ' (redirect page not match)'
+          iterator += 1 
+          result = 'Error movie -' + title + ': redirect page not match'
+          results << result
+          error_movies << title
         end
-        #puts result
-        results << result
       elsif !match_year and index == temp_result['candidate_movies']['title'].length - 1
         puts "Error movie" + iterator.to_s + ':' + title + ' (year not match)'
         iterator += 1 
@@ -103,7 +122,7 @@ movie_titles.each_with_index do |title, outer_index|
     end
   #case3: after search, no movie match, print and record error
   elsif search_error
-    puts "Error movie" + iterator.to_s + ':' + title
+    puts "Error movie" + iterator.to_s + ':' + title + ' (cannot find this title)'
     iterator += 1 
     result = 'Error movie -' + title + ': cannot find this title'
     results << result
