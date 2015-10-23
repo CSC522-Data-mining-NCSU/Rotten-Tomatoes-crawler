@@ -8,7 +8,7 @@ error_movies_total_info = Array.new #store total info of error movies (id, year,
 
 path = "../movie_titles.txt"
 #error_path = "./error_movies.txt"
-error_path2 = "./error_movies_step1.txt"
+error_path2 = "./error_movies_step2.txt"
 
 #read movie titles from movie_titles.txt
 File.open(path, "r") do |f|
@@ -36,7 +36,7 @@ error_movies.each do |error_movie_title|
   	fz_title = error_movie_title
   end
   error_movies_total_info << movies_total_info[fz_title]
-  puts iterator.to_s + " / 7649"
+  puts iterator.to_s + " / 3607"
   iterator += 1
 end
 
