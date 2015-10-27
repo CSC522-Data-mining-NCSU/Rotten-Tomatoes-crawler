@@ -1,24 +1,6 @@
 require 'mysql2'
 require 'pry'
 
-#Define Movie class and related method
-class Movie
-  attr_accessor :id
-  attr_accessor :rating_records
-  attr_accessor :temp_score
-
-  def initialize(id)
-    @id = id
-    @rating_records = Array.new
-    @temp_score = 0
-  end
-end
-
-#Define Rating class, a mapping class (between Movie and User)
-#Use one dimension array to represent Rating class.
-#Eg. [1, 2, 6] means user1 rate 2 point to movie 6
-@ratings = Hash.new
-
 #Define User class and related methods
 class User
   attr_accessor :id
@@ -39,37 +21,94 @@ class User
     @weight
   end
 end
+
+#Define Rating class, a mapping class (between Movie and User)
+class Rating
+  attr_accessor :user_id
+  attr_accessor :score
+  attr_accessor :movie_id
+
+  def initialize(user_id, score, movie_id)
+    @user_id = user_id
+    @score = score
+    @movie_id = movie_id
+  end
+end
+
+#Define Movie class and related method
+class Movie
+  attr_accessor :id
+  attr_accessor :rating_records
+  attr_accessor :temp_score
+
+  def initialize(id)
+    @id = id
+    @rating_records = Array.new
+    @temp_score = 0
+  end
+end
+
+#Add data to @ratings
+def ratings
+  return @ratings if @ratings
+  @rating_iterator = 0
+  @ratings = Hash.new
+  connect = Mysql2::Client.new(:host => "localhost", :username => "root")
+  begin
+    connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
+    results = connect.query("SELECT * FROM Netflix.ratings limit 5000", :as => :hash)
+    results.each do |result|
+      rating = Rating.new(result['user_id'], result['rating'], result['movie_id'])
+      @ratings[result['id']] = rating
+    end
+  rescue Exception => e
+      connect.close if connect
+      puts e.error
+  ensure
+    @rating_iterator += 1
+    if @rating_iterator % 10000 == 0
+      puts '==Reading ratings data========================================' 
+      puts @user_iterator.to_s + '/ 100480507'
+    end
+  end
+  return @ratings
+end
+
 #Add data to @users
 def users
   return @users if @users
+  @user_iterator = 0
   @users = Array.new
-  user_ids = Array.new
+  @user_ids = Array.new
   connect = Mysql2::Client.new(:host => "localhost", :username => "root")
-
   begin
     connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
     results = connect.query("SELECT id FROM Netflix.users", :as => :array)
     results.each do |result|
-      user_ids << result
+      @user_ids << result[0]
     end
-    user_ids.flatten!
   rescue Exception => e
       connect.close if connect
       puts e.error
   end
-
-  user_ids.each do |user_id|
+  #Create new user and add corresponding rating_records.
+  @user_ids.each do |user_id|
     begin
       user = User.new(user_id)
       connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
       results = connect.query("SELECT id FROM Netflix.ratings where user_id = #{user_id}", :as => :array)
       results.each do |result|
-        user.rating_records << result
+        user.rating_records << @ratings[result[0]]
       end
-      user.rating_records.flatten!
     rescue Exception => e
         #connect.close if connect
         puts e.error
+    ensure
+      @user_iterator += 1
+      if @user_iterator % 10000 == 0
+        puts '==Reading users data========================================' 
+        puts @user_iterator.to_s + '/' + @user_ids.length.to_s
+      end
     end
     @users << user
   end
@@ -79,57 +118,42 @@ end
 #Add data to @movies
 def movies
   return @movies if @movies
+  @movie_iterator = 0
   @movies = Array.new
-  movie_ids = Array.new
+  @movie_ids = Array.new
   connect = Mysql2::Client.new(:host => "localhost", :username => "root")
-
   begin
     connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
     results = connect.query("SELECT id FROM Netflix.movies", :as => :array)
     results.each do |result|
-      movie_ids << result
+      @movie_ids << result[0]
     end
-    movie_ids.flatten!
   rescue Exception => e
       connect.close if connect
       puts e.error
   end
-  
-  movie_ids.each do |movie_id|
+  #Create new movie and add corresponding rating_records.
+  @movie_ids.each do |movie_id|
     begin
       movie = Movie.new(movie_id)
       connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
       results = connect.query("SELECT id FROM Netflix.ratings where movie = #{movie_id}", :as => :array)
       results.each do |result|
-        movie.rating_records << result
+        movie.rating_records << @ratings[result[0]]
       end
-      movie.rating_records.flatten!
     rescue Exception => e
         #connect.close if connect
         puts e.error
+    ensure
+      @movie_iterator += 1
+      if movie_iterator % 10000 == 0
+        puts '==Reading movies data========================================' 
+        puts @movie_iterator.to_s + '/' + @movie_ids.length.to_s
+      end
     end
     @movies << movie
   end
   return @movies
-end
-
-#Add data to @ratings
-def ratings
-  return @ratings if !@ratings.empty?
-  single_rating = Array.new
-  connect = Mysql2::Client.new(:host => "localhost", :username => "root")
-
-  begin
-    connect = Mysql2::Client.new(:host => "localhost", :username => "root") if !connect
-    results = connect.query("SELECT * FROM Netflix.ratings limit 10", :as => :hash)
-    results.each do |result|
-      @ratings[result['id']] = [result['user_id'], result['rating'], result['movie_id']]
-    end
-  rescue Exception => e
-      connect.close if connect
-      puts e.error
-  end
-  return @ratings
 end
 
 #Define Lauw's algorithm
@@ -225,9 +249,10 @@ end
 
 #==========================================================================================
 #initialize
+ratings
 #users
 #movies
-ratings
+
 =begin    temperary commit
 calculate_weighted_scores_and_reputation(@movies, @users)
 
