@@ -15,7 +15,6 @@ begin
 		user_ids << result
 	end
 	user_ids.flatten!.sort!
-binding.pry
 rescue Exception => e
     connect.close if connect
 	puts e.error
